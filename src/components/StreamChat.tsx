@@ -11,7 +11,7 @@ import {
   Thread,
   LoadingIndicator
 } from 'stream-chat-react'
-import { Video, ExternalLink } from 'lucide-react'
+import { Video, Phone, PhoneOff } from 'lucide-react'
 import { useStream } from '@/contexts/StreamContext'
 
 interface StreamChatProps {
@@ -31,25 +31,58 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     isDemoMode
   } = useStream()
 
-  // Send video call invitation using Stream.io's proper video call system
-  const sendVideoCallInvitation = async () => {
+  // WhatsApp-like video calling system
+  const [callState, setCallState] = useState<'idle' | 'calling' | 'incoming'>('idle')
+  const [incomingCall, setIncomingCall] = useState<{from: string, timestamp: Date} | null>(null)
+  const [initialized, setInitialized] = useState(false)
+
+  // Start video call (WhatsApp style - immediate)
+  const startVideoCall = async () => {
     if (!chatChannel) return
 
     try {
-      // Send a simple but clear video call invitation
+      setCallState('calling')
+      
+      // Send call signal to other user
       await chatChannel.sendMessage({
-        text: `🎥 VIDEO GÖRÜŞME DAVETİ\n\n${partnerName} video görüşme yapmak istiyor!\n\n✅ Katılmak için URL'ye "/video" ekleyin\n❌ Reddet için yoksayın`,
-        type: ''
+        text: `📞 Video görüşme başlatıyor...`,
+        type: 'system',
+        custom: {
+          call_type: 'video_call_start',
+          caller: partnerName,
+          timestamp: new Date().toISOString()
+        }
       })
       
-      console.log('✅ Video call invitation sent')
+      // Simulate call connection and redirect to video page
+      setTimeout(() => {
+        window.location.href = '/video'
+      }, 2000)
+      
+      console.log('📞 Video call started')
     } catch (error) {
-      console.error('❌ Failed to send video call invitation:', error)
+      console.error('❌ Failed to start video call:', error)
+      setCallState('idle')
     }
   }
-  
-  const [initialized, setInitialized] = useState(false)
-  const [showVideoInvitation, setShowVideoInvitation] = useState(false)
+
+  // Accept incoming call
+  const acceptCall = () => {
+    setCallState('idle')
+    setIncomingCall(null)
+    window.location.href = '/video'
+  }
+
+  // Decline incoming call
+  const declineCall = () => {
+    setCallState('idle')
+    setIncomingCall(null)
+  }
+
+  // Cancel outgoing call
+  const cancelCall = () => {
+    setCallState('idle')
+  }
 
   // Initialize chat when component mounts
   useEffect(() => {
@@ -63,16 +96,28 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     init()
   }, [isStreamReady, partnerId, initialized, initializeChat])
 
-  // Listen for video invitation messages
+  // Listen for incoming calls
   useEffect(() => {
     if (!chatChannel) return
 
     const handleNewMessage = (event: any) => {
       const message = event.message
-      if (message.text && message.text.includes('VIDEO GÖRÜŞME DAVETİ')) {
-        // Show floating video invitation button for 30 seconds
-        setShowVideoInvitation(true)
-        setTimeout(() => setShowVideoInvitation(false), 30000)
+      
+      // Check for incoming video call
+      if (message.custom?.call_type === 'video_call_start') {
+        setCallState('incoming')
+        setIncomingCall({
+          from: message.custom.caller || 'Bilinmeyen',
+          timestamp: new Date(message.custom.timestamp || new Date())
+        })
+        
+        // Auto-decline after 30 seconds
+        setTimeout(() => {
+          if (callState === 'incoming') {
+            setCallState('idle')
+            setIncomingCall(null)
+          }
+        }, 30000)
       }
     }
 
@@ -81,7 +126,7 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     return () => {
       chatChannel.off('message.new', handleNewMessage)
     }
-  }, [chatChannel])
+  }, [chatChannel, callState])
 
 
 
@@ -204,23 +249,30 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     )
   }
 
-  // Custom header with video call button
+  // Custom header with WhatsApp-style video call button
   const CustomChannelHeader = () => (
     <div className="str-chat__channel-header flex justify-between items-center p-4 border-b">
       <div className="flex items-center space-x-3">
         <div className="text-blue-500">💬</div>
         <div>
           <h3 className="font-medium">{partnerName}</h3>
-          <p className="text-sm text-gray-500">Aktif</p>
+          <p className="text-sm text-gray-500">
+            {callState === 'calling' ? 'Aranıyor...' : 'Aktif'}
+          </p>
         </div>
       </div>
       <button
-        onClick={sendVideoCallInvitation}
-        className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        title="Video görüşme daveti gönder"
+        onClick={startVideoCall}
+        disabled={callState !== 'idle'}
+        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+          callState === 'calling' 
+            ? 'bg-gray-400 cursor-not-allowed' 
+            : 'bg-green-600 hover:bg-green-700'
+        } text-white`}
+        title="Video görüşme başlat"
       >
         <Video className="h-4 w-4" />
-        <span>Video Ara</span>
+        <span>{callState === 'calling' ? 'Aranıyor...' : 'Video Ara'}</span>
       </button>
     </div>
   )
@@ -238,28 +290,53 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
         </ChannelComponent>
       </Chat>
       
-      {/* Floating Video Invitation Button */}
-      {showVideoInvitation && (
-        <div className="fixed bottom-4 right-4 z-50 animate-bounce">
-          <button
-            onClick={() => {
-              // Navigate to video page in same tab
-              window.location.href = '/video'
-              setShowVideoInvitation(false)
-            }}
-            className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700 transition-colors border-2 border-white"
-          >
-            <Video className="h-5 w-5" />
-            <span className="font-medium">Video Görüşmeye Katıl</span>
-            <ExternalLink className="h-4 w-4" />
-          </button>
-          {/* Close button */}
-          <button
-            onClick={() => setShowVideoInvitation(false)}
-            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-colors"
-          >
-            ×
-          </button>
+      {/* WhatsApp-style Calling Screen */}
+      {callState === 'calling' && (
+        <div className="fixed inset-0 bg-green-600 z-50 flex flex-col items-center justify-center text-white">
+          <div className="text-center space-y-6">
+            <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mx-auto">
+              <Video className="h-16 w-16" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold">{partnerName}</h2>
+              <p className="text-lg opacity-90">Aranıyor...</p>
+            </div>
+            <button
+              onClick={cancelCall}
+              className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+            >
+              <PhoneOff className="h-8 w-8" />
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* WhatsApp-style Incoming Call */}
+      {callState === 'incoming' && incomingCall && (
+        <div className="fixed inset-0 bg-gray-900/95 z-50 flex flex-col items-center justify-center text-white">
+          <div className="text-center space-y-6">
+            <div className="w-32 h-32 bg-green-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
+              <Video className="h-16 w-16" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold">{incomingCall.from}</h2>
+              <p className="text-lg opacity-90">Video görüşme başlatıyor...</p>
+            </div>
+            <div className="flex space-x-8">
+              <button
+                onClick={declineCall}
+                className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+              >
+                <PhoneOff className="h-8 w-8" />
+              </button>
+              <button
+                onClick={acceptCall}
+                className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600 transition-colors"
+              >
+                <Phone className="h-8 w-8" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
