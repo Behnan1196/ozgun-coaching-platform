@@ -11,7 +11,7 @@ import {
   Thread,
   LoadingIndicator
 } from 'stream-chat-react'
-import { Video } from 'lucide-react'
+import { Video, ExternalLink } from 'lucide-react'
 import { useStream } from '@/contexts/StreamContext'
 
 interface StreamChatProps {
@@ -36,11 +36,12 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     if (!chatChannel) return
 
     try {
-      // Send a simple chat message indicating video call invitation
+      // Send a simple but clear video call invitation
       await chatChannel.sendMessage({
-        text: `📹 **Video görüşme daveti gönderdi**\n\n▶️ Video görüşmeye katılmak için buraya tıklayın: [Video Görüşme](/video)\n\n✅ **Kabul Et** - Video sayfasına git\n❌ **Reddet** - Bu daveti yoksay`,
+        text: `🎥 VIDEO GÖRÜŞME DAVETİ\n\n${partnerName} video görüşme yapmak istiyor!\n\n✅ Katılmak için:\n1️⃣ Tarayıcının adres çubuğuna gidin\n2️⃣ Sonuna "/video" yazın\n3️⃣ Enter'a basın\n\n📱 Veya:\n• Yeni sekme açın\n• Bu sayfanın URL'sinin sonuna "/video" ekleyin\n\n❌ Reddetmek için bu mesajı yoksayın`,
         type: ''
       })
+      
       console.log('✅ Video call invitation sent')
     } catch (error) {
       console.error('❌ Failed to send video call invitation:', error)
@@ -48,6 +49,7 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
   }
   
   const [initialized, setInitialized] = useState(false)
+  const [showVideoInvitation, setShowVideoInvitation] = useState(false)
 
   // Initialize chat when component mounts
   useEffect(() => {
@@ -60,6 +62,26 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     
     init()
   }, [isStreamReady, partnerId, initialized, initializeChat])
+
+  // Listen for video invitation messages
+  useEffect(() => {
+    if (!chatChannel) return
+
+    const handleNewMessage = (event: any) => {
+      const message = event.message
+      if (message.text && message.text.includes('VIDEO GÖRÜŞME DAVETİ')) {
+        // Show floating video invitation button for 10 seconds
+        setShowVideoInvitation(true)
+        setTimeout(() => setShowVideoInvitation(false), 10000)
+      }
+    }
+
+    chatChannel.on('message.new', handleNewMessage)
+
+    return () => {
+      chatChannel.off('message.new', handleNewMessage)
+    }
+  }, [chatChannel])
 
 
 
@@ -204,7 +226,7 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
   )
 
   return (
-    <div className={`h-full ${className}`}>
+    <div className={`h-full ${className} relative`}>
       <Chat client={chatClient} theme="str-chat__theme-light">
         <ChannelComponent channel={chatChannel}>
           <Window>
@@ -215,6 +237,23 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
           <Thread />
         </ChannelComponent>
       </Chat>
+      
+      {/* Floating Video Invitation Button */}
+      {showVideoInvitation && (
+        <div className="fixed bottom-4 right-4 z-50 animate-bounce">
+          <button
+            onClick={() => {
+              window.open('/video', '_blank')
+              setShowVideoInvitation(false)
+            }}
+            className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700 transition-colors border-2 border-white"
+          >
+            <Video className="h-5 w-5" />
+            <span className="font-medium">Video Görüşmeye Katıl</span>
+            <ExternalLink className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
