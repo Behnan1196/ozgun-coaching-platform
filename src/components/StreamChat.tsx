@@ -33,7 +33,7 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
 
   // WhatsApp-like video calling system
   const [callState, setCallState] = useState<'idle' | 'calling' | 'incoming'>('idle')
-  const [incomingCall, setIncomingCall] = useState<{from: string, timestamp: Date} | null>(null)
+  const [incomingCall, setIncomingCall] = useState<{from: string, timestamp: Date, callId?: string} | null>(null)
   const [initialized, setInitialized] = useState(false)
 
   // Start video call (WhatsApp style - immediate)
@@ -42,6 +42,9 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
 
     try {
       setCallState('calling')
+      
+      // Generate unique call ID
+      const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       
       // Send call signal to other user using regular message
       await chatChannel.sendMessage({
@@ -55,16 +58,17 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
           actions: [],
           call_type: 'video_call_start',
           caller: partnerName,
+          call_id: callId,
           timestamp: new Date().toISOString()
         }]
       })
       
-      // Simulate call connection and redirect to video page
+      // Shorter delay and redirect with call parameters
       setTimeout(() => {
-        window.location.href = '/video'
-      }, 2000)
+        window.location.href = `/video?callId=${callId}&partner=${encodeURIComponent(partnerName)}`
+      }, 1500) // Reduced from 2000ms to 1500ms
       
-      console.log('📞 Video call started')
+      console.log('📞 Video call started with ID:', callId)
     } catch (error) {
       console.error('❌ Failed to start video call:', error)
       setCallState('idle')
@@ -73,9 +77,11 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
 
   // Accept incoming call
   const acceptCall = () => {
-    setCallState('idle')
-    setIncomingCall(null)
-    window.location.href = '/video'
+    if (incomingCall && incomingCall.callId) {
+      setCallState('idle')
+      setIncomingCall(null)
+      window.location.href = `/video?callId=${incomingCall.callId}&partner=${encodeURIComponent(incomingCall.from)}`
+    }
   }
 
   // Decline incoming call
@@ -115,7 +121,8 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
           setCallState('incoming')
           setIncomingCall({
             from: attachment.caller || 'Bilinmeyen',
-            timestamp: new Date(attachment.timestamp || new Date())
+            timestamp: new Date(attachment.timestamp || new Date()),
+            callId: attachment.call_id
           })
           
           // Auto-decline after 30 seconds
