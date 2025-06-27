@@ -38,7 +38,7 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     try {
       // Send a simple but clear video call invitation
       await chatChannel.sendMessage({
-        text: `🎥 VIDEO GÖRÜŞME DAVETİ\n\n${partnerName} video görüşme yapmak istiyor!\n\n✅ Katılmak için:\n1️⃣ Tarayıcının adres çubuğuna gidin\n2️⃣ Sonuna "/video" yazın\n3️⃣ Enter'a basın\n\n📱 Veya:\n• Yeni sekme açın\n• Bu sayfanın URL'sinin sonuna "/video" ekleyin\n\n❌ Reddetmek için bu mesajı yoksayın`,
+        text: `🎥 VIDEO GÖRÜŞME DAVETİ\n\n${partnerName} video görüşme yapmak istiyor!\n\n✅ Katılmak için URL'ye "/video" ekleyin\n❌ Reddet için yoksayın`,
         type: ''
       })
       
@@ -70,9 +70,9 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     const handleNewMessage = (event: any) => {
       const message = event.message
       if (message.text && message.text.includes('VIDEO GÖRÜŞME DAVETİ')) {
-        // Show floating video invitation button for 10 seconds
+        // Show floating video invitation button for 30 seconds
         setShowVideoInvitation(true)
-        setTimeout(() => setShowVideoInvitation(false), 10000)
+        setTimeout(() => setShowVideoInvitation(false), 30000)
       }
     }
 
@@ -243,7 +243,8 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
         <div className="fixed bottom-4 right-4 z-50 animate-bounce">
           <button
             onClick={() => {
-              window.open('/video', '_blank')
+              // Navigate to video page in same tab
+              window.location.href = '/video'
               setShowVideoInvitation(false)
             }}
             className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700 transition-colors border-2 border-white"
@@ -251,6 +252,13 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
             <Video className="h-5 w-5" />
             <span className="font-medium">Video Görüşmeye Katıl</span>
             <ExternalLink className="h-4 w-4" />
+          </button>
+          {/* Close button */}
+          <button
+            onClick={() => setShowVideoInvitation(false)}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-colors"
+          >
+            ×
           </button>
         </div>
       )}
