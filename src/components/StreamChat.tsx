@@ -11,6 +11,7 @@ import {
   Thread,
   LoadingIndicator
 } from 'stream-chat-react'
+import { Video } from 'lucide-react'
 import { useStream } from '@/contexts/StreamContext'
 
 interface StreamChatProps {
@@ -29,6 +30,26 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     isStreamReady,
     isDemoMode
   } = useStream()
+
+  // Send video call invitation
+  const sendVideoCallInvitation = async () => {
+    if (!chatChannel) return
+
+    try {
+      await chatChannel.sendMessage({
+        text: `📹 Video görüşme daveti gönderdi`,
+        type: 'video_call_invitation',
+        custom: {
+          type: 'video_call_invitation',
+          sender_name: partnerName,
+          timestamp: new Date().toISOString()
+        }
+      })
+      console.log('✅ Video call invitation sent')
+    } catch (error) {
+      console.error('❌ Failed to send video call invitation:', error)
+    }
+  }
   
   const [initialized, setInitialized] = useState(false)
 
@@ -163,12 +184,33 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     )
   }
 
+  // Custom header with video call button
+  const CustomChannelHeader = () => (
+    <div className="str-chat__channel-header flex justify-between items-center p-4 border-b">
+      <div className="flex items-center space-x-3">
+        <div className="text-blue-500">💬</div>
+        <div>
+          <h3 className="font-medium">{partnerName}</h3>
+          <p className="text-sm text-gray-500">Aktif</p>
+        </div>
+      </div>
+      <button
+        onClick={sendVideoCallInvitation}
+        className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        title="Video görüşme daveti gönder"
+      >
+        <Video className="h-4 w-4" />
+        <span>Video Ara</span>
+      </button>
+    </div>
+  )
+
   return (
     <div className={`h-full ${className}`}>
       <Chat client={chatClient} theme="str-chat__theme-light">
         <ChannelComponent channel={chatChannel}>
           <Window>
-            <ChannelHeader />
+            <CustomChannelHeader />
             <MessageList />
             <MessageInput />
           </Window>
