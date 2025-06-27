@@ -332,38 +332,38 @@ export function StreamVideoCall({ partnerId, partnerName, className = '' }: Stre
     )
   }
 
-  // Ready state (camera ready, show "Ara" button)
+  // Ready state (camera preview, show "Ara" button)
   if (callState === 'ready' && videoCall) {
     return (
       <div className={`h-full ${className}`}>
-        <StreamVideo client={videoClient}>
-          <StreamCall call={videoCall}>
-            <StreamTheme>
-              <div className="h-full flex flex-col">
-                <div className="flex-1">
-                  <PaginatedGridLayout />
-                </div>
-                <div className="p-4 bg-gray-50 border-t">
-                  <div className="flex justify-center gap-4 mb-4">
-                    <button
-                      onClick={handleStartCall}
-                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      📞 Ara
-                    </button>
-                    <button
-                      onClick={handleEndCall}
-                      className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      📞 Bitir
-                    </button>
-                  </div>
-                  <CallControls />
-                </div>
-              </div>
-            </StreamTheme>
-          </StreamCall>
-        </StreamVideo>
+        <div className="h-full flex flex-col">
+          <div className="flex-1 bg-gray-900 rounded-lg flex items-center justify-center relative">
+            {/* Camera preview placeholder */}
+            <div className="text-center text-white">
+              <div className="text-6xl mb-4">📹</div>
+              <h3 className="text-xl font-medium mb-2">Kamera Hazır</h3>
+              <p className="text-gray-300">
+                {partnerName} ile görüşme başlatmaya hazır
+              </p>
+            </div>
+          </div>
+          <div className="p-4 bg-gray-50 border-t">
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleStartCall}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                📞 Ara
+              </button>
+              <button
+                onClick={handleEndCall}
+                className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                📞 Bitir
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }

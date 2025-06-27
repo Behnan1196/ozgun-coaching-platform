@@ -399,10 +399,9 @@ export function StreamProvider({ children }: StreamProviderProps) {
         }
       }
       
-      // Join the call locally (camera ready but not ringing yet)
-      await videoCall.join()
+      // Just prepare the call (don't join yet - only join when ringing or accepting)
       setCallState('ready')
-      console.log('✅ Video call setup complete - ready to ring')
+      console.log('✅ Video call setup complete - ready to ring (not joined yet)')
       
     } catch (error: any) {
       console.error('❌ Failed to setup video call:', error)
@@ -435,6 +434,10 @@ export function StreamProvider({ children }: StreamProviderProps) {
       console.log('📞 Ringing video call...')
       setCallState('outgoing')
       setOutgoingCall(videoCall)
+      
+      // First join the call locally, then ring
+      await videoCall.join()
+      console.log('✅ Joined call locally')
       
       // Ring the other participants (this sends the notification)
       await videoCall.ring()
