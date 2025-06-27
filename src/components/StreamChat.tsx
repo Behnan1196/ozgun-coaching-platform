@@ -43,15 +43,20 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     try {
       setCallState('calling')
       
-      // Send call signal to other user
+      // Send call signal to other user using regular message
       await chatChannel.sendMessage({
         text: `📞 Video görüşme başlatıyor...`,
-        type: 'system',
-        custom: {
+        type: '', // Use regular message type
+        // Put call data in the message itself
+        attachments: [{
+          type: 'video_call_signal',
+          title: 'Video Görüşme',
+          text: `${partnerName} video görüşme başlatıyor`,
+          actions: [],
           call_type: 'video_call_start',
           caller: partnerName,
           timestamp: new Date().toISOString()
-        }
+        }]
       })
       
       // Simulate call connection and redirect to video page
@@ -103,21 +108,24 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     const handleNewMessage = (event: any) => {
       const message = event.message
       
-      // Check for incoming video call
-      if (message.custom?.call_type === 'video_call_start') {
-        setCallState('incoming')
-        setIncomingCall({
-          from: message.custom.caller || 'Bilinmeyen',
-          timestamp: new Date(message.custom.timestamp || new Date())
-        })
-        
-        // Auto-decline after 30 seconds
-        setTimeout(() => {
-          if (callState === 'incoming') {
-            setCallState('idle')
-            setIncomingCall(null)
-          }
-        }, 30000)
+      // Check for incoming video call in attachments
+      if (message.attachments && message.attachments.length > 0) {
+        const attachment = message.attachments[0]
+        if (attachment.type === 'video_call_signal' && attachment.call_type === 'video_call_start') {
+          setCallState('incoming')
+          setIncomingCall({
+            from: attachment.caller || 'Bilinmeyen',
+            timestamp: new Date(attachment.timestamp || new Date())
+          })
+          
+          // Auto-decline after 30 seconds
+          setTimeout(() => {
+            if (callState === 'incoming') {
+              setCallState('idle')
+              setIncomingCall(null)
+            }
+          }, 30000)
+        }
       }
     }
 
