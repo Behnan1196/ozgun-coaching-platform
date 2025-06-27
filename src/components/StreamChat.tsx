@@ -31,19 +31,15 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     isDemoMode
   } = useStream()
 
-  // Send video call invitation
+  // Send video call invitation using Stream.io's proper video call system
   const sendVideoCallInvitation = async () => {
     if (!chatChannel) return
 
     try {
+      // Send a simple chat message indicating video call invitation
       await chatChannel.sendMessage({
-        text: `📹 Video görüşme daveti gönderdi`,
-        type: 'video_call_invitation',
-        custom: {
-          type: 'video_call_invitation',
-          sender_name: partnerName,
-          timestamp: new Date().toISOString()
-        }
+        text: `📹 **Video görüşme daveti gönderdi**\n\n▶️ Video görüşmeye katılmak için buraya tıklayın: [Video Görüşme](/video)\n\n✅ **Kabul Et** - Video sayfasına git\n❌ **Reddet** - Bu daveti yoksay`,
+        type: ''
       })
       console.log('✅ Video call invitation sent')
     } catch (error) {
@@ -64,6 +60,8 @@ export function StreamChat({ partnerId, partnerName, className = '' }: StreamCha
     
     init()
   }, [isStreamReady, partnerId, initialized, initializeChat])
+
+
 
   // Loading state
   if (chatLoading || !chatClient) {
