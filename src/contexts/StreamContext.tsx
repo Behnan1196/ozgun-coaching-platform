@@ -26,15 +26,25 @@ interface StreamContextType {
   videoLoading: boolean
   videoError: string | null
   
+  // Video Call States
+  incomingCall: Call | null
+  outgoingCall: Call | null
+  callState: 'idle' | 'setup' | 'ready' | 'outgoing' | 'incoming' | 'active' | 'ended'
+  
   // Actions
   initializeChat: (partnerId: string) => Promise<void>
   initializeVideo: (partnerId: string) => Promise<void>
+  setupVideoCall: () => Promise<void>
   startVideoCall: () => Promise<void>
   endVideoCall: () => Promise<void>
+  acceptIncomingCall: () => Promise<void>
+  rejectIncomingCall: () => Promise<void>
+  cancelOutgoingCall: () => Promise<void>
   
   // Status
   isStreamReady: boolean
   isDemoMode: boolean
+  debugStreamConnection: () => void
 }
 
 const StreamContext = createContext<StreamContextType | undefined>(undefined)
@@ -58,6 +68,11 @@ export function StreamProvider({ children }: StreamProviderProps) {
   const [videoCall, setVideoCall] = useState<Call | null>(null)
   const [videoLoading, setVideoLoading] = useState(false)
   const [videoError, setVideoError] = useState<string | null>(null)
+  
+  // Video call states
+  const [incomingCall, setIncomingCall] = useState<Call | null>(null)
+  const [outgoingCall, setOutgoingCall] = useState<Call | null>(null)
+  const [callState, setCallState] = useState<'idle' | 'setup' | 'ready' | 'outgoing' | 'incoming' | 'active' | 'ended'>('idle')
   
   // General state
   const [isStreamReady, setIsStreamReady] = useState(false)
@@ -104,6 +119,30 @@ export function StreamProvider({ children }: StreamProviderProps) {
         return
       }
 
+      // Skip if already initialized for this user
+      if (chatClient && videoClient && isStreamReady) {
+        console.log('🔄 Stream clients already initialized for user:', user.id)
+        return
+      }
+
+      // Clean up existing clients if they exist for a different user
+      if (chatClient || videoClient) {
+        console.log('🧹 Cleaning up existing Stream clients...')
+        try {
+          if (chatClient) {
+            await chatClient.disconnectUser()
+            setChatClient(null)
+          }
+          if (videoClient) {
+            await videoClient.disconnectUser()
+            setVideoClient(null)
+          }
+        } catch (error) {
+          console.warn('⚠️ Error cleaning up existing clients:', error)
+        }
+        setIsStreamReady(false)
+      }
+
       try {
         console.log('🌊 Initializing Stream.io clients for user:', user.id)
         
@@ -128,6 +167,46 @@ export function StreamProvider({ children }: StreamProviderProps) {
           id: user.id, 
           name: user.full_name || user.username 
         }, token)
+        
+        // Listen for incoming calls
+        video.on('call.ring', (event: any) => {
+          console.log('📞 Incoming call received:', event.call)
+          console.log('📞 Call details:', {
+            callId: event.call.id,
+            from: event.call.created_by,
+            members: event.call.state.members
+          })
+          setIncomingCall(event.call)
+          setCallState('incoming')
+        })
+        
+        // Listen for call accepted
+        video.on('call.accepted', (event: any) => {
+          console.log('✅ Call accepted:', event.call)
+          setCallState('active')
+        })
+        
+        // Listen for call rejected
+        video.on('call.rejected', (event: any) => {
+          console.log('❌ Call rejected:', event.call)
+          setCallState('ended')
+          setOutgoingCall(null)
+          setIncomingCall(null)
+        })
+        
+        // Listen for call ended
+        video.on('call.ended', (event: any) => {
+          console.log('📞 Call ended:', event.call)
+          setCallState('ended')
+          setVideoCall(null)
+          setOutgoingCall(null)
+          setIncomingCall(null)
+          // Reset to idle after a brief delay
+          setTimeout(() => setCallState('idle'), 2000)
+        })
+        
+
+        
         setVideoClient(video)
         console.log('📹 Stream Video client initialized successfully')
         
@@ -148,7 +227,12 @@ export function StreamProvider({ children }: StreamProviderProps) {
     }
 
     initializeStreamClients()
-  }, [user])
+    
+    // Cleanup function to prevent memory leaks
+    return () => {
+      // Don't cleanup immediately, but mark for cleanup if component unmounts
+    }
+  }, [user?.id]) // Only depend on user.id to prevent unnecessary re-renders
 
   // Initialize chat channel
   const initializeChat = async (partnerId: string) => {
@@ -253,10 +337,20 @@ export function StreamProvider({ children }: StreamProviderProps) {
       }
       
       const call = createVideoCall(videoClient, user.id, partnerId)
-      await call.create()
+      
+      // Create the call with both members so they can receive ring notifications
+      await call.create({
+        ring: false, // Don't ring immediately when creating
+        data: {
+          members: [
+            { user_id: user.id },
+            { user_id: partnerId }
+          ]
+        }
+      })
       
       setVideoCall(call)
-      console.log('✅ Video call ready')
+      console.log('✅ Video call ready with members:', [user.id, partnerId])
       
     } catch (error) {
       console.error('❌ Failed to initialize video call:', error)
@@ -266,17 +360,18 @@ export function StreamProvider({ children }: StreamProviderProps) {
     }
   }
 
-  // Start video call
-  const startVideoCall = async () => {
+  // Setup video call (prepare camera interface)
+  const setupVideoCall = async () => {
     if (!videoCall) {
       setVideoError('Video call not initialized')
       return
     }
 
     try {
-      console.log('📞 Starting video call...')
+      console.log('📹 Setting up video call...')
+      setCallState('setup')
       
-      // First, check if camera is available
+      // Check if camera is available
       try {
         const devices = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         // Release the test stream immediately
@@ -287,25 +382,31 @@ export function StreamProvider({ children }: StreamProviderProps) {
         
         if (deviceError.name === 'NotReadableError') {
           setVideoError('Camera is already in use by another application. Please close other video apps and try again.')
+          setCallState('idle')
           return
         } else if (deviceError.name === 'NotAllowedError') {
           setVideoError('Camera permission denied. Please allow camera access and try again.')
+          setCallState('idle')
           return
         } else if (deviceError.name === 'NotFoundError') {
           setVideoError('No camera found. Please connect a camera and try again.')
+          setCallState('idle')
           return
         } else {
           setVideoError(`Camera error: ${deviceError.message}`)
+          setCallState('idle')
           return
         }
       }
       
-      // Join the video call
+      // Join the call locally (camera ready but not ringing yet)
       await videoCall.join()
-      console.log('✅ Video call started')
+      setCallState('ready')
+      console.log('✅ Video call setup complete - ready to ring')
       
     } catch (error: any) {
-      console.error('❌ Failed to start video call:', error)
+      console.error('❌ Failed to setup video call:', error)
+      setCallState('idle')
       
       // Provide specific error messages
       if (error.message?.includes('Device in use')) {
@@ -313,8 +414,44 @@ export function StreamProvider({ children }: StreamProviderProps) {
       } else if (error.message?.includes('Permission denied')) {
         setVideoError('Camera permission denied. Please allow camera access in your browser.')
       } else {
-        setVideoError(`Failed to start video call: ${error.message || 'Unknown error'}`)
+        setVideoError(`Failed to setup video call: ${error.message || 'Unknown error'}`)
       }
+    }
+  }
+
+  // Start video call (ring the other person from ready state)
+  const startVideoCall = async () => {
+    if (!videoCall) {
+      setVideoError('Video call not initialized')
+      return
+    }
+
+    if (callState !== 'ready') {
+      setVideoError('Video call not ready. Please setup the call first.')
+      return
+    }
+
+    try {
+      console.log('📞 Ringing video call...')
+      setCallState('outgoing')
+      setOutgoingCall(videoCall)
+      
+      // Ring the other participants (this sends the notification)
+      await videoCall.ring()
+      console.log('✅ Video call ringing sent')
+      console.log('📞 Call details for debugging:', {
+        callId: videoCall.id,
+        callType: videoCall.type,
+        members: videoCall.state.members,
+        createdBy: videoCall.state.createdBy
+      })
+      
+    } catch (error: any) {
+      console.error('❌ Failed to start video call:', error)
+      setCallState('ready') // Go back to ready state
+      setOutgoingCall(null)
+      
+      setVideoError(`Failed to start video call: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -325,11 +462,94 @@ export function StreamProvider({ children }: StreamProviderProps) {
     try {
       console.log('📞 Ending video call...')
       await videoCall.leave()
+      setCallState('ended')
+      setVideoCall(null)
+      setOutgoingCall(null)
+      setIncomingCall(null)
+      // Reset to idle after a brief delay
+      setTimeout(() => setCallState('idle'), 2000)
       console.log('✅ Video call ended')
       
     } catch (error) {
       console.error('❌ Failed to end video call:', error)
       setVideoError('Failed to end video call')
+    }
+  }
+
+  // Accept incoming call
+  const acceptIncomingCall = async () => {
+    if (!incomingCall) return
+
+    try {
+      console.log('✅ Accepting incoming call...')
+      await incomingCall.join()
+      setVideoCall(incomingCall)
+      setIncomingCall(null)
+      setCallState('active')
+      console.log('✅ Incoming call accepted and joined')
+    } catch (error: any) {
+      console.error('❌ Failed to accept call:', error)
+      setVideoError(`Failed to accept call: ${error.message}`)
+      setCallState('idle')
+      setIncomingCall(null)
+    }
+  }
+
+  // Reject incoming call
+  const rejectIncomingCall = async () => {
+    if (!incomingCall) return
+
+    try {
+      console.log('❌ Rejecting incoming call...')
+      await incomingCall.reject()
+      setIncomingCall(null)
+      setCallState('idle')
+      console.log('✅ Incoming call rejected')
+    } catch (error: any) {
+      console.error('❌ Failed to reject call:', error)
+      setVideoError(`Failed to reject call: ${error.message}`)
+      setCallState('idle')
+      setIncomingCall(null)
+    }
+  }
+
+  // Cancel outgoing call
+  const cancelOutgoingCall = async () => {
+    if (!outgoingCall) return
+
+    try {
+      console.log('❌ Canceling outgoing call...')
+      await outgoingCall.leave()
+      setOutgoingCall(null)
+      setCallState('idle')
+      console.log('✅ Outgoing call canceled')
+    } catch (error: any) {
+      console.error('❌ Failed to cancel call:', error)
+      setVideoError(`Failed to cancel call: ${error.message}`)
+      setCallState('idle')
+      setOutgoingCall(null)
+    }
+  }
+
+  // Debug function to check connection status
+  const debugStreamConnection = () => {
+    console.log('🔧 Stream Connection Debug:', {
+      chatClient: !!chatClient,
+      videoClient: !!videoClient,
+      currentUser: user?.id,
+      isStreamReady,
+      callState,
+      hasVideoCall: !!videoCall,
+      hasIncomingCall: !!incomingCall,
+      hasOutgoingCall: !!outgoingCall
+    })
+    
+    if (videoCall) {
+      console.log('🔧 Video Call State:', {
+        callId: videoCall.id,
+        callType: videoCall.type,
+        members: videoCall.state.members
+      })
     }
   }
 
@@ -346,15 +566,25 @@ export function StreamProvider({ children }: StreamProviderProps) {
     videoLoading,
     videoError,
     
+    // Video Call States
+    incomingCall,
+    outgoingCall,
+    callState,
+    
     // Actions
     initializeChat,
     initializeVideo,
+    setupVideoCall,
     startVideoCall,
     endVideoCall,
+    acceptIncomingCall,
+    rejectIncomingCall,
+    cancelOutgoingCall,
     
     // Status
     isStreamReady,
     isDemoMode,
+    debugStreamConnection,
   }
 
   return (
